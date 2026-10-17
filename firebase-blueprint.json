@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "User profile credentials and security info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 1024 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email"]
+    },
+    "inventoryItem": {
+      "title": "Inventory Item",
+      "description": "Real cataloged digital twin asset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "subname": { "type": "string", "maxLength": 256 },
+        "category": { "type": "string", "maxLength": 64 },
+        "subCategory": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "maxLength": 64 },
+        "statusLabel": { "type": "string", "maxLength": 64 },
+        "value": { "type": "number" },
+        "boughtDate": { "type": "string", "maxLength": 64 },
+        "condition": { "type": "string", "maxLength": 64 },
+        "location": { "type": "string", "maxLength": 256 },
+        "imageUrl": { "type": "string", "maxLength": 2048 },
+        "imageAlt": { "type": "string", "maxLength": 512 },
+        "serialNumber": { "type": "string", "maxLength": 128 },
+        "expiresDate": { "type": "string", "maxLength": 64 },
+        "dosage": { "type": "string", "maxLength": 128 },
+        "indication": { "type": "string", "maxLength": 256 },
+        "carrier": { "type": "string", "maxLength": 128 },
+        "brand": { "type": "string", "maxLength": 128 },
+        "prescribedUses": { "type": "string", "maxLength": 512 },
+        "storageProtocol": { "type": "string", "maxLength": 512 },
+        "copay": { "type": "number" },
+        "assignedBin": { "type": "string", "maxLength": 256 },
+        "linkedRxRef": { "type": "string", "maxLength": 128 },
+        "batch": { "type": "string", "maxLength": 64 },
+        "rfid": { "type": "string", "maxLength": 64 },
+        "firmware": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "name", "category"]
+    },
+    "archiveItem": {
+      "title": "Archive Item",
+      "description": "Decommissioned or archived asset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "archivedReason": { "type": "string", "maxLength": 256 },
+        "archivedDate": { "type": "string", "maxLength": 64 },
+        "statusBadge": { "type": "string", "maxLength": 64 },
+        "statusBadgeText": { "type": "string", "maxLength": 64 },
+        "purchaseValue": { "type": "number" },
+        "purchaseDate": { "type": "string", "maxLength": 64 },
+        "secondaryLabel": { "type": "string", "maxLength": 64 },
+        "secondaryValue": { "type": "string", "maxLength": 128 },
+        "imageUrl": { "type": "string", "maxLength": 2048 },
+        "imageAlt": { "type": "string", "maxLength": 512 }
+      },
+      "required": ["id", "userId", "name", "category"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Private user account profile and security telemetry"
+    },
+    "/users/{userId}/inventory/{itemId}": {
+      "schema": "inventoryItem",
+      "description": "User specific real cataloged objects"
+    },
+    "/users/{userId}/archive/{archiveId}": {
+      "schema": "archiveItem",
+      "description": "User specific real decommissioned and archived items"
+    }
+  }
+}

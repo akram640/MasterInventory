@@ -1,0 +1,6 @@
+{
+  "name": "OmniVault - AI Inventory & Reticle Scanner",
+  "description": "Swiss utilitarian asset indexing, optical AI reticle scanner, digital twin dossier management, and vault ledger archive.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
