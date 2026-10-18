@@ -1,78 +1,69 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryItem, ScreenType } from '../../types/inventory';
+import {
+  computeUnifiedCategories,
+  doesItemMatchCategory,
+  resolveCanonicalCategoryName,
+} from '../../utils/categoryTaxonomy';
+import { resolveDisplayAssetId } from '../../utils/assetId';
 
 interface InventoryScreenProps {
   items: InventoryItem[];
+  selectedDossierId?: string;
   onSelectDossierItem: (item: InventoryItem) => void;
   onNavigate: (screen: ScreenType) => void;
   onArchiveItems: (itemIds: string[]) => void;
   onDuplicateItem: (item: InventoryItem) => void;
   initialCategoryFilter?: string | null;
+  onCategoryChange?: (categoryName: string) => void;
+  onInspectImage?: (item: InventoryItem) => void;
 }
 
 export const InventoryScreen: React.FC<InventoryScreenProps> = ({
   items,
+  selectedDossierId,
   onSelectDossierItem,
   onNavigate,
   onArchiveItems,
   onDuplicateItem,
   initialCategoryFilter = 'All',
+  onCategoryChange,
+  onInspectImage,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategoryFilter || 'All');
   const [sortBy, setSortBy] = useState<'recently_added' | 'expiring_soon' | 'highest_value'>('recently_added');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() =>
+    typeof window !== 'undefined' && window.innerWidth >= 1024 ? 'table' : 'grid'
+  );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'Active' | 'In Storage' | 'Archived'>('Active');
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
-  // Dynamically compute real categories and item counts directly from vault items
+  useEffect(() => {
+    if (initialCategoryFilter) {
+      setSelectedCategory(initialCategoryFilter);
+    }
+  }, [initialCategoryFilter]);
+
+  const handleRowOrCardSelect = (item: InventoryItem) => {
+    onSelectDossierItem(item);
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      onNavigate('dossier');
+    }
+  };
+
+  // Dynamically compute real categories and item counts identically to Home screen (DashboardScreen)
   const categories = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const unified = computeUnifiedCategories(items).map((cat) => ({
+      label: cat.name,
+      count: cat.count,
+    }));
 
-    items.forEach((item) => {
-      const cat = item.category?.trim() || 'General';
-      counts[cat] = (counts[cat] || 0) + 1;
-    });
-
-    // Baseline catalog categories in OmniVault
-    const baseline = [
-      'Medicine',
-      'Health & Wellness',
-      'Home Appliances',
-      'Electronics',
-      'Apparel',
-      'Furniture',
-      'Vehicles',
-      'Documents',
-    ];
-
-    const result: { label: string; count: number }[] = [
-      { label: 'All', count: items.length },
-    ];
-
-    // First add all categories that currently exist in the user's inventory
-    Object.keys(counts).forEach((cat) => {
-      result.push({
-        label: cat,
-        count: counts[cat],
-      });
-    });
-
-    // Then add any baseline categories not yet in the list with count 0
-    baseline.forEach((base) => {
-      if (!counts[base] && !result.some((r) => r.label.toLowerCase() === base.toLowerCase())) {
-        result.push({
-          label: base,
-          count: 0,
-        });
-      }
-    });
-
-    return result;
+    return [{ label: 'All', count: items.length }, ...unified];
   }, [items]);
 
   // Filtering and sorting
@@ -81,21 +72,25 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
 
     // Category filter
     if (selectedCategory !== 'All') {
-      list = list.filter((item) =>
-        item.category.toLowerCase().includes(selectedCategory.toLowerCase())
-      );
+      list = list.filter((item) => doesItemMatchCategory(item, selectedCategory));
     }
 
     // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (item) =>
+      list = list.filter((item) => {
+        const assetId = resolveDisplayAssetId(item).toLowerCase();
+        return (
           item.name.toLowerCase().includes(q) ||
+          assetId.includes(q) ||
           item.code.toLowerCase().includes(q) ||
+          (item.serialNumber && item.serialNumber.toLowerCase().includes(q)) ||
+          (item.brand && item.brand.toLowerCase().includes(q)) ||
           item.subname.toLowerCase().includes(q) ||
-          (item.location && item.location.toLowerCase().includes(q))
-      );
+          (item.location && item.location.toLowerCase().includes(q)) ||
+          (item.geoLocation && item.geoLocation.toLowerCase().includes(q))
+        );
+      });
     }
 
     // Sort
@@ -147,7 +142,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
 
   return (
     <div
-      className="flex flex-col w-full max-w-2xl mx-auto px-4 pt-20 pb-36 gap-3 select-none"
+      className="flex flex-col w-full max-w-2xl lg:max-w-none mx-auto px-4 lg:px-8 pt-20 lg:pt-6 pb-36 lg:pb-16 gap-4 select-none"
       onClick={() => {
         setIsSortMenuOpen(false);
         setActiveMenuId(null);
@@ -163,7 +158,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search ${items.length} ${items.length === 1 ? 'item' : 'items'} by name, serial, category...`}
+            placeholder={`Search ${items.length} ${items.length === 1 ? 'item' : 'items'} by name, Asset ID, brand, category...`}
             className="w-full h-11 pl-10 pr-20 bg-[#f4f2fd] rounded-xl text-[13px] text-[#1a1b22] placeholder:text-[#45474a]/60 focus:bg-white focus:ring-2 focus:ring-[#0051d5]/30 outline-none transition-all"
           />
           <div className="absolute right-2 flex items-center gap-1">
@@ -194,31 +189,35 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
 
         {/* Category Filter Horizontal Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {categories.map((cat) => (
-            <button
-              key={cat.label}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedCategory(cat.label);
-              }}
-              className={`shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full font-mono text-[11px] transition-all active:scale-95 ${
-                selectedCategory === cat.label
-                  ? 'bg-[#121417] text-white shadow-sm'
-                  : 'bg-[#eeedf7] text-[#45474a] hover:bg-[#e8e7f1] hover:text-[#1a1b22]'
-              }`}
-            >
-              <span>{cat.label}</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] ${
-                  selectedCategory === cat.label
-                    ? 'bg-white/20 text-white'
-                    : 'bg-[#e3e1ec] text-[#1a1b22]'
+          {categories.map((cat) => {
+            const isSelected = selectedCategory === cat.label;
+            return (
+              <button
+                key={cat.label}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedCategory(cat.label);
+                  onCategoryChange?.(cat.label);
+                }}
+                className={`shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full font-mono text-[11px] transition-all active:scale-95 ${
+                  isSelected
+                    ? 'bg-[#0051d5] text-white shadow-sm font-semibold'
+                    : 'bg-[#eeedf7] text-[#1a1b22] hover:bg-[#e8e7f1]'
                 }`}
               >
-                {cat.count}
-              </span>
-            </button>
-          ))}
+                <span>{cat.label}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full font-mono text-[10px] font-bold tabular-nums leading-none ${
+                    isSelected
+                      ? 'bg-white/25 text-white'
+                      : 'bg-[#f4f2fd] text-[#0051d5] border border-[#c6c6ca]/50'
+                  }`}
+                >
+                  {cat.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Secondary Control Bar: View, Sort & Filter */}
@@ -394,31 +393,34 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                     <th className="py-3 px-3 w-10 text-center">
                       <span className="sr-only">Select</span>
                     </th>
-                    <th className="py-3 px-2 w-14">S.No</th>
+                    <th className="py-3 px-3 min-w-[140px] whitespace-nowrap">Asset ID</th>
                     <th className="py-3 px-3 min-w-[200px]">Product &amp; Brand</th>
-                    <th className="py-3 px-3 min-w-[150px]">Category / Sub-category</th>
+                    <th className="py-3 px-3 min-w-[140px]">Category / Sub</th>
                     <th className="py-3 px-3 w-24">Quantity</th>
-                    <th className="py-3 px-3 min-w-[120px] text-right">Price (₹ INR)</th>
+                    <th className="py-3 px-3 min-w-[115px] text-right">Price (₹ INR)</th>
                     <th className="py-3 px-3 w-28">Condition</th>
-                    <th className="py-3 px-3 w-28">Expiry / Date</th>
-                    <th className="py-3 px-3 w-32">Location / Box</th>
+                    <th className="py-3 px-3 min-w-[155px]">Asset Dates</th>
+                    <th className="py-3 px-3 min-w-[140px]">Manual Location</th>
+                    <th className="py-3 px-3 min-w-[170px]">Geo Location (Photo)</th>
                     <th className="py-3 px-3 w-16 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eeedf7]">
-                  {filteredItems.map((item, idx) => {
+                  {filteredItems.map((item) => {
                     const isChecked = selectedIds.includes(item.id);
-                    const displaySerial = item.serialNumber || String(idx + 1);
+                    const isInspected = selectedDossierId === item.id;
+                    const unifiedAssetId = resolveDisplayAssetId(item);
 
                     return (
                       <tr
                         key={item.id}
-                        onClick={() => {
-                          onSelectDossierItem(item);
-                          onNavigate('dossier');
-                        }}
+                        onClick={() => handleRowOrCardSelect(item)}
                         className={`hover:bg-[#f8f7fd] transition-colors cursor-pointer group ${
-                          isChecked ? 'bg-[#f4f2fd]/60' : ''
+                          isInspected
+                            ? 'bg-[#f4f2fd] lg:shadow-[inset_3px_0_0_#0051d5]'
+                            : isChecked
+                            ? 'bg-[#f4f2fd]/60'
+                            : ''
                         }`}
                       >
                         {/* Checkbox */}
@@ -434,30 +436,57 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                           />
                         </td>
 
-                        {/* S.No */}
-                        <td className="py-2.5 px-2 font-mono text-[11px] font-bold text-[#45474a]">
-                          {displaySerial}
+                        {/* Unified Asset ID */}
+                        <td className="py-2.5 px-3 font-mono text-[11px] font-bold text-[#0051d5] tabular-nums whitespace-nowrap">
+                          {unifiedAssetId}
                         </td>
 
                         {/* Product & Brand */}
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-lg bg-[#eeedf7] overflow-hidden shrink-0 border border-[#c6c6ca]/40">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onInspectImage?.(item);
+                              }}
+                              title="Click to inspect full-screen image"
+                              className="relative w-9 h-9 rounded-lg bg-[#eeedf7] overflow-hidden shrink-0 border border-[#c6c6ca]/40 group/img cursor-zoom-in"
+                            >
                               <img
                                 src={item.imageUrl}
                                 alt={item.name}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
                               />
-                            </div>
+                              <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/35 flex items-center justify-center transition-colors">
+                                <span className="material-symbols-outlined text-white text-[14px] opacity-0 group-hover/img:opacity-100">
+                                  fullscreen
+                                </span>
+                              </div>
+                            </button>
                             <div className="flex flex-col min-w-0">
                               <span className="font-semibold text-[#1a1b22] truncate max-w-[220px]">
                                 {item.name}
                               </span>
-                              <div className="flex items-center gap-1.5 text-[11px] text-[#45474a] font-mono">
-                                {item.brand && <span className="font-medium text-[#0051d5]">{item.brand}</span>}
-                                {item.brand && <span>•</span>}
-                                <span>{item.code}</span>
+                              <div className="flex items-center gap-1.5 text-[11px] text-[#45474a] font-mono truncate">
+                                {item.brand ? (
+                                  <span className="font-medium text-[#0051d5] truncate">
+                                    {item.brand}
+                                  </span>
+                                ) : (
+                                  <span className="text-[#45474a] truncate">
+                                    {item.subCategory || resolveCanonicalCategoryName(item)}
+                                  </span>
+                                )}
+                                {item.barcode && item.barcode !== 'N/A' && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="text-[10px] text-[#45474a]">
+                                      Lot/EAN: {item.barcode}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -466,7 +495,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                         {/* Category & Sub-category */}
                         <td className="py-2.5 px-3">
                           <div className="flex flex-col">
-                            <span className="font-medium text-[#1a1b22] truncate">{item.category}</span>
+                            <span className="font-medium text-[#1a1b22] truncate">{resolveCanonicalCategoryName(item)}</span>
                             <span className="text-[11px] text-[#45474a] truncate">
                               {item.subCategory || 'General'}
                             </span>
@@ -474,7 +503,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                         </td>
 
                         {/* Quantity */}
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#1a1b22]">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#1a1b22] tabular-nums">
                           {item.quantity || '1 Unit'}
                         </td>
 
@@ -494,30 +523,57 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
 
                         {/* Condition */}
                         <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[#f4f2fd] text-[#1a1b22] border border-[#e3e1ec]">
+                          <span className="text-[11px] font-mono text-[#1a1b22]">
                             {item.condition || 'New / Unopened'}
                           </span>
                         </td>
 
-                        {/* Expiry / Date */}
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#45474a]">
-                          {item.expiresDate && item.expiresDate !== 'N/A' ? (
-                            <span className="text-amber-800 font-semibold">{item.expiresDate}</span>
-                          ) : (
-                            item.boughtDate || item.purchaseDate || 'N/A'
-                          )}
+                        {/* Asset Dates: Purchase, Manufacturing & Expiry */}
+                        <td className="py-2.5 px-3 font-mono text-[10px] tabular-nums">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[#1a1b22]">
+                              <span className="text-[#45474a]">Pur:</span>{' '}
+                              {item.purchaseDate || item.boughtDate || 'N/A'}
+                            </span>
+                            <span className="text-[#45474a]">
+                              <span>Mfg:</span> {item.manufacturingDate || 'N/A'}
+                            </span>
+                            {item.expiresDate && item.expiresDate !== 'N/A' ? (
+                              <span className="text-amber-800 font-semibold">
+                                Exp: {item.expiresDate}
+                              </span>
+                            ) : (
+                              <span className="text-[#45474a]">Exp: N/A</span>
+                            )}
+                          </div>
                         </td>
 
-                        {/* Location / Box */}
+                        {/* Manual Location / Box */}
                         <td className="py-2.5 px-3 text-[11px] text-[#45474a]">
-                          <div className="flex flex-col">
-                            <span className="truncate">{item.location || 'Personal Vault'}</span>
+                          <div className="flex flex-col gap-0.5 max-w-[150px]">
+                            <span className="truncate font-medium text-[#1a1b22]">
+                              {item.location || 'Personal Vault'}
+                            </span>
                             {item.boxNumber && item.boxNumber !== 'N/A' && (
-                              <span className="font-mono text-[10px] text-[#0051d5] font-medium">
+                              <span className="font-mono text-[10px] text-[#45474a]">
                                 {item.boxNumber}
                               </span>
                             )}
                           </div>
+                        </td>
+
+                        {/* Captured Geo Location */}
+                        <td className="py-2.5 px-3 text-[11px] text-[#45474a]">
+                          {item.geoLocation ? (
+                            <span
+                              className="font-mono text-[10px] text-[#1a1b22] line-clamp-2 max-w-[200px]"
+                              title={item.geoLocation}
+                            >
+                              {item.geoLocation}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[10px] text-[#76777b]">—</span>
+                          )}
                         </td>
 
                         {/* Actions */}
@@ -530,10 +586,10 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                               onSelectDossierItem(item);
                               onNavigate('dossier');
                             }}
-                            title="Inspect & Edit Dossier"
+                            title="Open Full Dossier View"
                             className="w-7 h-7 rounded-lg hover:bg-[#f4f2fd] text-[#45474a] hover:text-[#0051d5] flex items-center justify-center transition-colors mx-auto"
                           >
-                            <span className="material-symbols-outlined text-[16px]">visibility</span>
+                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
                           </button>
                         </td>
                       </tr>
@@ -544,21 +600,23 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
             </div>
           </div>
         ) : (
-          /* Card View */
-          <div className="flex flex-col gap-3.5">
-            {filteredItems.map((item, idx) => {
+          /* Card View (1-Col on Mobile, 2-Col on Desktop XL) */
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
+            {filteredItems.map((item) => {
               const isChecked = selectedIds.includes(item.id);
-              const displaySerial = item.serialNumber || String(idx + 1);
+              const isInspected = selectedDossierId === item.id;
+              const unifiedAssetId = resolveDisplayAssetId(item);
 
               return (
                 <article
                   key={item.id}
-                  onClick={() => {
-                    onSelectDossierItem(item);
-                    onNavigate('dossier');
-                  }}
-                  className={`relative bg-white rounded-2xl shadow-sm border border-[#e3e1ec] hover:border-[#0051d5]/50 transition-all cursor-pointer flex flex-col p-3.5 gap-3 ${
-                    isChecked ? 'ring-1 ring-[#0051d5]/40 bg-[#fbf8ff]' : ''
+                  onClick={() => handleRowOrCardSelect(item)}
+                  className={`relative bg-white rounded-2xl shadow-sm border hover:border-[#0051d5]/50 transition-all cursor-pointer flex flex-col p-3.5 gap-3 ${
+                    isInspected
+                      ? 'lg:border-[#0051d5] lg:ring-2 lg:ring-[#0051d5]/15 border-[#e3e1ec]'
+                      : isChecked
+                      ? 'ring-1 ring-[#0051d5]/40 bg-[#fbf8ff] border-[#e3e1ec]'
+                      : 'border-[#e3e1ec]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -577,22 +635,32 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       </label>
 
                       {/* Thumbnail */}
-                      <div className="rounded-xl bg-[#f4f2fd] overflow-hidden shrink-0 relative border border-[#c6c6ca]/40 w-14 h-14">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onInspectImage?.(item);
+                        }}
+                        title="Click to inspect full-screen image"
+                        className="rounded-xl bg-[#f4f2fd] overflow-hidden shrink-0 relative border border-[#c6c6ca]/40 w-14 h-14 group/img cursor-zoom-in"
+                      >
                         <img
                           src={item.imageUrl}
                           alt={item.imageAlt || item.name}
                           className="w-full h-full object-cover"
                           loading="lazy"
                         />
-                      </div>
+                        <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 flex items-center justify-center transition-colors">
+                          <span className="material-symbols-outlined text-white text-[18px] opacity-0 group-hover/img:opacity-100">
+                            fullscreen
+                          </span>
+                        </div>
+                      </button>
 
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-1.5 py-0.5 rounded-md bg-[#121417] text-white font-mono text-[10px] font-bold">
-                            #{displaySerial}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded-full bg-[#eeedf7] text-[#45474a] font-mono text-[10px] font-medium">
-                            {item.code}
+                          <span className="px-2 py-0.5 rounded-md bg-[#121417] text-white font-mono text-[10px] font-bold tracking-tight whitespace-nowrap">
+                            {unifiedAssetId}
                           </span>
                           {item.brand && (
                             <span className="px-1.5 py-0.5 rounded-full bg-[#e8eaf6] text-[#0051d5] font-mono text-[10px] font-semibold">
@@ -600,7 +668,7 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                             </span>
                           )}
                           <span className="px-1.5 py-0.5 rounded-full bg-[#f4f2fd] text-[#1a1b22] text-[11px] font-medium">
-                            {item.category}
+                            {resolveCanonicalCategoryName(item)}
                           </span>
                         </div>
                         <h3 className="font-semibold text-[14px] text-[#1a1b22] truncate mt-1">
@@ -698,12 +766,51 @@ export const InventoryScreen: React.FC<InventoryScreenProps> = ({
                       </span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[#45474a] text-[10px]">LOCATION</span>
+                      <span className="text-[#45474a] text-[10px]">MANUAL LOCATION</span>
                       <span className="text-[#1a1b22] font-medium truncate">
                         {item.location || item.boxNumber || 'Personal Vault'}
                       </span>
                     </div>
                   </div>
+
+                  {/* 3-Date Lifecycle Strip: Purchase, Manufacturing, Expiry */}
+                  <div className="grid grid-cols-3 gap-2 bg-[#f4f2fd]/40 px-2.5 py-2 rounded-xl font-mono text-[10px] border border-[#e3e1ec]/40 tabular-nums">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[#45474a] text-[9px] truncate">PURCHASE DATE</span>
+                      <span className="text-[#1a1b22] font-semibold truncate">
+                        {item.purchaseDate || item.boughtDate || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[#45474a] text-[9px] truncate">MFG DATE</span>
+                      <span className="text-[#1a1b22] font-medium truncate">
+                        {item.manufacturingDate || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[#45474a] text-[9px] truncate">EXPIRY DATE</span>
+                      <span
+                        className={`truncate ${
+                          item.expiresDate && item.expiresDate !== 'N/A'
+                            ? 'text-amber-800 font-semibold'
+                            : 'text-[#45474a]'
+                        }`}
+                      >
+                        {item.expiresDate || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Captured Geo Location line if available */}
+                  {item.geoLocation && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#45474a] font-mono pt-0.5">
+                      <span className="material-symbols-outlined text-[14px] text-[#0051d5] shrink-0">
+                        location_on
+                      </span>
+                      <span className="text-[#1a1b22] font-medium">Geo:</span>
+                      <span className="truncate">{item.geoLocation}</span>
+                    </div>
+                  )}
 
                   {/* Notes / Advisory Footer */}
                   {item.notes && (

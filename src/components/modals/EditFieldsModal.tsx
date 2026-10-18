@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
 import { InventoryItem } from '../../types/inventory';
 import { SmoothDatePickerModal } from './SmoothDatePickerModal';
+import {
+  CANONICAL_CATEGORIES,
+  resolveCanonicalCategoryName,
+} from '../../utils/categoryTaxonomy';
+import { detectAssetGeoLocation } from '../../utils/geolocation';
+import {
+  generateUniqueAssetId,
+  isValidAssetId,
+  resolveDisplayAssetId,
+} from '../../utils/assetId';
 
 interface EditFieldsModalProps {
   item: InventoryItem;
@@ -9,33 +19,62 @@ interface EditFieldsModalProps {
 }
 
 export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose, onSave }) => {
+  const initialAssetId = resolveDisplayAssetId(item);
   const [formData, setFormData] = useState({
-    serialNumber: item.serialNumber || '',
+    serialNumber: initialAssetId,
     name: item.name,
     brand: item.brand || '',
-    category: item.category,
+    category: resolveCanonicalCategoryName(item),
     subCategory: item.subCategory || '',
     quantity: item.quantity || '1 Unit',
     value: item.value || 0,
     priceSource: item.priceSource || '',
     condition: item.condition || 'New / Unopened',
     expiresDate: item.expiresDate || '',
+    manufacturingDate: item.manufacturingDate || '',
     purchaseDate: item.purchaseDate || item.boughtDate || '',
     boxNumber: item.boxNumber || '',
     location: item.location || '',
+    geoLocation: item.geoLocation || '',
     barcode: item.barcode || '',
     description: item.description || '',
     notes: item.notes || '',
   });
 
+  const [isDetectingGeo, setIsDetectingGeo] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [datePickerTarget, setDatePickerTarget] = useState<'purchase' | 'expiry'>('purchase');
+  const [datePickerTarget, setDatePickerTarget] = useState<'purchase' | 'manufacturing' | 'expiry'>('purchase');
+
+  const handleDetectGps = async () => {
+    setIsDetectingGeo(true);
+    try {
+      const resolved = await detectAssetGeoLocation(null);
+      if (resolved?.formattedAddress) {
+        setFormData((prev) => ({ ...prev, geoLocation: resolved.formattedAddress }));
+      }
+    } finally {
+      setIsDetectingGeo(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmedId = formData.serialNumber.replace(/^#/, '').trim();
+    const finalAssetId = isValidAssetId(trimmedId)
+      ? trimmedId
+      : generateUniqueAssetId({
+          id: item.id,
+          name: formData.name.trim() || item.name,
+          category: formData.category,
+          subCategory: formData.subCategory.trim() || undefined,
+          purchaseDate: formData.purchaseDate.trim() || item.boughtDate,
+          boughtDate: item.boughtDate,
+        });
+
     onSave({
       ...item,
-      serialNumber: formData.serialNumber || undefined,
+      code: finalAssetId,
+      serialNumber: finalAssetId,
       name: formData.name.trim() || item.name,
       brand: formData.brand.trim() || undefined,
       category: formData.category,
@@ -45,9 +84,12 @@ export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose,
       priceSource: formData.priceSource.trim() || undefined,
       condition: formData.condition || 'New / Unopened',
       expiresDate: formData.expiresDate.trim() || undefined,
+      manufacturingDate: formData.manufacturingDate.trim() || undefined,
       purchaseDate: formData.purchaseDate.trim() || undefined,
+      boughtDate: formData.purchaseDate.trim() || item.boughtDate,
       boxNumber: formData.boxNumber.trim() || undefined,
       location: formData.location.trim() || undefined,
+      geoLocation: formData.geoLocation.trim() || undefined,
       barcode: formData.barcode.trim() || undefined,
       description: formData.description.trim() || undefined,
       notes: formData.notes.trim() || undefined,
@@ -76,16 +118,20 @@ export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose,
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3.5 text-[13px] overscroll-contain">
-          {/* Row 1: Serial No & Brand */}
+          {/* Row 1: Asset ID & Brand */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="flex flex-col gap-1">
-              <label className="font-mono text-[11px] text-[#45474a] font-medium">Serial No.</label>
+              <label className="font-mono text-[11px] text-[#0051d5] font-semibold">
+                Asset ID (Unique)
+              </label>
               <input
                 type="text"
                 value={formData.serialNumber}
-                onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
-                placeholder="e.g. 1, SN-9428"
-                className="h-10 px-3 bg-[#f4f2fd] rounded-xl border border-[#c6c6ca]/50 focus:bg-white focus:ring-2 focus:ring-[#0051d5]/30 outline-none font-mono"
+                onChange={(e) =>
+                  setFormData({ ...formData, serialNumber: e.target.value.toUpperCase() })
+                }
+                placeholder="e.g. ELE-261017-8F2A"
+                className="h-10 px-3 bg-[#f4f2fd] rounded-xl border border-[#0051d5]/40 focus:bg-white focus:ring-2 focus:ring-[#0051d5]/30 outline-none font-mono text-[12px] font-bold text-[#0051d5]"
               />
             </div>
             <div className="flex flex-col gap-1">
@@ -118,17 +164,29 @@ export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose,
               <label className="font-mono text-[11px] text-[#45474a] font-medium">Category</label>
               <select
                 value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                onChange={(e) => {
+                  const nextCat = e.target.value;
+                  const nextAssetId = generateUniqueAssetId({
+                    id: item.id,
+                    name: formData.name,
+                    category: nextCat,
+                    subCategory: formData.subCategory,
+                    purchaseDate: formData.purchaseDate,
+                    boughtDate: item.boughtDate,
+                  });
+                  setFormData({
+                    ...formData,
+                    category: nextCat,
+                    serialNumber: nextAssetId,
+                  });
+                }}
                 className="h-10 px-3 bg-[#f4f2fd] rounded-xl border border-[#c6c6ca]/50 focus:bg-white focus:ring-2 focus:ring-[#0051d5]/30 outline-none"
               >
-                <option value="Health & Wellness">Health &amp; Wellness</option>
-                <option value="Home Appliances">Home Appliances</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Medicine">Medicine</option>
-                <option value="Wardrobe & Apparel">Wardrobe &amp; Apparel</option>
-                <option value="Home & Furniture">Home &amp; Furniture</option>
-                <option value="Vehicles & Mobility">Vehicles &amp; Mobility</option>
-                <option value="Documents & Valuables">Documents &amp; Valuables</option>
+                {CANONICAL_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -197,7 +255,7 @@ export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose,
             </div>
           </div>
 
-          {/* Row 6: Box No & Storage Location */}
+          {/* Row 6: Box No & Manual Storage Location */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="flex flex-col gap-1">
               <label className="font-mono text-[11px] text-[#45474a] font-medium">Box No.</label>
@@ -210,7 +268,9 @@ export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose,
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="font-mono text-[11px] text-[#45474a] font-medium">Storage Location</label>
+              <label className="font-mono text-[11px] text-[#45474a] font-medium">
+                Manual Location (Storage)
+              </label>
               <input
                 type="text"
                 value={formData.location}
@@ -221,57 +281,119 @@ export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose,
             </div>
           </div>
 
-          {/* Row 7: Expiry Date, Purchase Date & Barcode (with Smooth Calendar Pickers) */}
-          <div className="grid grid-cols-3 gap-2">
-            {/* Expiry Date */}
-            <div className="flex flex-col gap-1">
-              <label className="font-mono text-[10px] text-[#45474a] font-medium truncate">Expiry Date</label>
-              <button
-                type="button"
-                onClick={() => {
-                  setDatePickerTarget('expiry');
-                  setIsDatePickerOpen(true);
-                }}
-                className="h-10 px-2 bg-[#f4f2fd] hover:bg-[#eae8f7] rounded-xl border border-[#c6c6ca]/50 flex items-center justify-between text-[11px] font-mono text-[#1a1b22] text-left transition-colors active:scale-95"
-              >
-                <span className="truncate">{formData.expiresDate || 'N/A'}</span>
-                <span className="material-symbols-outlined text-[15px] text-[#0051d5] shrink-0">
-                  event
-                </span>
-              </button>
-            </div>
-
-            {/* Purchase Date */}
-            <div className="flex flex-col gap-1">
-              <label className="font-mono text-[10px] text-[#0051d5] font-semibold truncate flex items-center gap-0.5">
-                Purchase Date
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setDatePickerTarget('purchase');
-                  setIsDatePickerOpen(true);
-                }}
-                className="h-10 px-2 bg-[#f4f2fd] hover:bg-[#eae8f7] rounded-xl border border-[#0051d5]/40 flex items-center justify-between text-[11px] font-mono text-[#1a1b22] text-left transition-colors active:scale-95 ring-1 ring-[#0051d5]/20 shadow-xs"
-              >
-                <span className="truncate font-semibold">{formData.purchaseDate || 'N/A'}</span>
-                <span className="material-symbols-outlined text-[16px] text-[#0051d5] shrink-0">
-                  calendar_month
-                </span>
-              </button>
-            </div>
-
-            {/* Barcode */}
-            <div className="flex flex-col gap-1">
-              <label className="font-mono text-[10px] text-[#45474a] font-medium truncate">Barcode</label>
+          {/* Row 6B: Geo Location (Photo Taken - Human Readable) */}
+          <div className="flex flex-col gap-1">
+            <label className="font-mono text-[11px] text-[#0051d5] font-semibold flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">location_on</span>
+              <span>Geo Location (Photo Taken)</span>
+            </label>
+            <div className="flex items-center gap-1.5">
               <input
                 type="text"
-                value={formData.barcode}
-                onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                placeholder="N/A"
-                className="h-10 px-2.5 bg-[#f4f2fd] rounded-xl border border-[#c6c6ca]/50 focus:bg-white focus:ring-2 focus:ring-[#0051d5]/30 outline-none text-[12px]"
+                value={formData.geoLocation}
+                onChange={(e) => setFormData({ ...formData, geoLocation: e.target.value })}
+                placeholder="Street, neighborhood, city, and state"
+                className="flex-1 h-10 px-3 bg-[#f4f2fd] rounded-xl border border-[#0051d5]/35 focus:bg-white focus:ring-2 focus:ring-[#0051d5]/30 outline-none text-[12px]"
               />
+              <button
+                type="button"
+                onClick={handleDetectGps}
+                disabled={isDetectingGeo}
+                title="Detect current GPS Geo Location"
+                className="h-10 px-3 rounded-xl bg-[#e8eaf6] hover:bg-[#dbe1ff] text-[#0051d5] font-mono text-[11px] font-semibold flex items-center gap-1 shrink-0 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <span
+                  className={`material-symbols-outlined text-[16px] ${
+                    isDetectingGeo ? 'animate-spin' : ''
+                  }`}
+                >
+                  {isDetectingGeo ? 'progress_activity' : 'my_location'}
+                </span>
+                <span>GPS</span>
+              </button>
             </div>
+          </div>
+
+          {/* Row 7: 3 Asset Lifecycle Dates (Purchase Date, Manufacturing Date, Expiry Date) */}
+          <div className="flex flex-col gap-1.5 bg-[#f4f2fd]/50 p-3 rounded-2xl border border-[#e3e1ec]">
+            <span className="font-mono text-[10px] font-semibold text-[#45474a] uppercase tracking-wider">
+              Asset Lifecycle Dates (Ownership · MFD · Expiry)
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {/* 1. Purchase Date (Ownership) */}
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] text-[#0051d5] font-semibold truncate">
+                  Purchase Date (Ownership)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDatePickerTarget('purchase');
+                    setIsDatePickerOpen(true);
+                  }}
+                  className="h-10 px-2.5 bg-white hover:bg-[#eae8f7] rounded-xl border border-[#0051d5]/40 flex items-center justify-between text-[11px] font-mono text-[#1a1b22] text-left transition-colors active:scale-95 ring-1 ring-[#0051d5]/15 shadow-2xs"
+                >
+                  <span className="truncate font-semibold">{formData.purchaseDate || 'N/A'}</span>
+                  <span className="material-symbols-outlined text-[15px] text-[#0051d5] shrink-0">
+                    calendar_month
+                  </span>
+                </button>
+              </div>
+
+              {/* 2. Manufacturing Date */}
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] text-[#45474a] font-medium truncate">
+                  Manufacturing Date (MFD)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDatePickerTarget('manufacturing');
+                    setIsDatePickerOpen(true);
+                  }}
+                  className="h-10 px-2.5 bg-white hover:bg-[#eae8f7] rounded-xl border border-[#c6c6ca]/50 flex items-center justify-between text-[11px] font-mono text-[#1a1b22] text-left transition-colors active:scale-95"
+                >
+                  <span className="truncate">{formData.manufacturingDate || 'N/A'}</span>
+                  <span className="material-symbols-outlined text-[15px] text-[#0051d5] shrink-0">
+                    precision_manufacturing
+                  </span>
+                </button>
+              </div>
+
+              {/* 3. Expiry Date (Medicines / Food) */}
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] text-[#45474a] font-medium truncate">
+                  Expiry Date (Meds / Food)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDatePickerTarget('expiry');
+                    setIsDatePickerOpen(true);
+                  }}
+                  className="h-10 px-2.5 bg-white hover:bg-[#eae8f7] rounded-xl border border-[#c6c6ca]/50 flex items-center justify-between text-[11px] font-mono text-[#1a1b22] text-left transition-colors active:scale-95"
+                >
+                  <span className="truncate">{formData.expiresDate || 'N/A'}</span>
+                  <span className="material-symbols-outlined text-[15px] text-[#0051d5] shrink-0">
+                    event
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 7B: Barcode / Lot / EAN */}
+          <div className="flex flex-col gap-1">
+            <label className="font-mono text-[11px] text-[#45474a] font-medium">
+              Barcode / Lot / EAN
+            </label>
+            <input
+              type="text"
+              value={formData.barcode}
+              onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+              placeholder="e.g. 8901234567890 or Batch #CTZ-8802"
+              className="h-10 px-3 bg-[#f4f2fd] rounded-xl border border-[#c6c6ca]/50 focus:bg-white focus:ring-2 focus:ring-[#0051d5]/30 outline-none font-mono text-[12px]"
+            />
           </div>
 
           {/* Row 8: Description */}
@@ -320,12 +442,38 @@ export const EditFieldsModal: React.FC<EditFieldsModalProps> = ({ item, onClose,
       {/* Smooth Calendar Date Picker Modal */}
       {isDatePickerOpen && (
         <SmoothDatePickerModal
-          title={datePickerTarget === 'purchase' ? 'Select Purchase Date' : 'Select Expiry Date'}
-          initialDate={datePickerTarget === 'purchase' ? formData.purchaseDate : formData.expiresDate}
+          title={
+            datePickerTarget === 'purchase'
+              ? 'Select Purchase Date (Ownership)'
+              : datePickerTarget === 'manufacturing'
+              ? 'Select Manufacturing Date (MFD)'
+              : 'Select Expiry Date'
+          }
+          initialDate={
+            datePickerTarget === 'purchase'
+              ? formData.purchaseDate
+              : datePickerTarget === 'manufacturing'
+              ? formData.manufacturingDate
+              : formData.expiresDate
+          }
           onClose={() => setIsDatePickerOpen(false)}
           onSelectDate={(chosenDate) => {
             if (datePickerTarget === 'purchase') {
-              setFormData((prev) => ({ ...prev, purchaseDate: chosenDate }));
+              const nextAssetId = generateUniqueAssetId({
+                id: item.id,
+                name: formData.name,
+                category: formData.category,
+                subCategory: formData.subCategory,
+                purchaseDate: chosenDate !== 'N/A' ? chosenDate : item.boughtDate,
+                boughtDate: item.boughtDate,
+              });
+              setFormData((prev) => ({
+                ...prev,
+                purchaseDate: chosenDate,
+                serialNumber: nextAssetId,
+              }));
+            } else if (datePickerTarget === 'manufacturing') {
+              setFormData((prev) => ({ ...prev, manufacturingDate: chosenDate }));
             } else {
               setFormData((prev) => ({ ...prev, expiresDate: chosenDate }));
             }

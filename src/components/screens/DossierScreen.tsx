@@ -1,22 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { InventoryItem, ScreenType } from '../../types/inventory';
 import { EditFieldsModal } from '../modals/EditFieldsModal';
+import { detectAssetGeoLocation } from '../../utils/geolocation';
+import { resolveDisplayAssetId } from '../../utils/assetId';
 
 interface DossierScreenProps {
   item: InventoryItem;
   onNavigate: (screen: ScreenType) => void;
   onSaveDossier: (updatedItem: InventoryItem) => void;
+  onInspectImage?: (item: InventoryItem) => void;
 }
 
 export const DossierScreen: React.FC<DossierScreenProps> = ({
   item,
   onNavigate,
   onSaveDossier,
+  onInspectImage,
 }) => {
   const [currentDossier, setCurrentDossier] = useState<InventoryItem>(item);
   const [isSaved, setIsSaved] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isEditingManualLoc, setIsEditingManualLoc] = useState(false);
+  const [manualLocDraft, setManualLocDraft] = useState(item.location || 'Personal Vault');
+  const [isDetectingGeo, setIsDetectingGeo] = useState(false);
+
+  useEffect(() => {
+    setCurrentDossier(item);
+    setManualLocDraft(item.location || 'Personal Vault');
+  }, [item]);
+
+  const unifiedAssetId = resolveDisplayAssetId(currentDossier);
 
   const handleConfirmSave = () => {
     setIsSaved(true);
@@ -26,6 +40,35 @@ export const DossierScreen: React.FC<DossierScreenProps> = ({
     }, 1200);
   };
 
+  const handleSaveInlineManualLocation = () => {
+    const nextLoc = manualLocDraft.trim() || 'Personal Vault';
+    const updated: InventoryItem = {
+      ...currentDossier,
+      location: nextLoc,
+    };
+    setCurrentDossier(updated);
+    onSaveDossier(updated);
+    setIsEditingManualLoc(false);
+  };
+
+  const handleDetectDossierGeo = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDetectingGeo(true);
+    try {
+      const resolved = await detectAssetGeoLocation(null);
+      if (resolved?.formattedAddress) {
+        const updated: InventoryItem = {
+          ...currentDossier,
+          geoLocation: resolved.formattedAddress,
+        };
+        setCurrentDossier(updated);
+        onSaveDossier(updated);
+      }
+    } finally {
+      setIsDetectingGeo(false);
+    }
+  };
+
   const handleCopy = (label: string, text: string) => {
     navigator.clipboard?.writeText(text);
     setCopiedField(label);
@@ -33,26 +76,31 @@ export const DossierScreen: React.FC<DossierScreenProps> = ({
   };
 
   return (
-    <div className="flex flex-col w-full max-w-2xl mx-auto px-4 pt-20 pb-28 gap-4 select-none">
+    <div className="flex flex-col w-full max-w-2xl lg:max-w-5xl mx-auto px-4 lg:px-8 pt-20 lg:pt-6 pb-28 lg:pb-12 gap-4 select-none">
       {/* Optical Scan Result Banner Card */}
       <section className="w-full bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3.5 border border-[#e3e1ec]">
         <div className="flex gap-4 items-center">
-          {/* Thumbnail with scan reticle effect */}
-          <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-[#eeedf7] shrink-0 flex items-center justify-center border border-[#c6c6ca]/40">
+          {/* Thumbnail with scan reticle effect — clickable for full-screen HD view */}
+          <button
+            type="button"
+            onClick={() => onInspectImage?.(currentDossier)}
+            title="Click to inspect full-screen HD image"
+            className="relative w-20 h-20 rounded-xl overflow-hidden bg-[#eeedf7] shrink-0 flex items-center justify-center border border-[#c6c6ca]/40 group cursor-zoom-in"
+          >
             <img
               src={currentDossier.imageUrl}
               alt={currentDossier.imageAlt || currentDossier.name}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-[#0051d5]/10 flex items-center justify-center pointer-events-none">
-              <span className="material-symbols-outlined text-[#0051d5] text-[24px]">
-                center_focus_strong
+            <div className="absolute inset-0 bg-[#0051d5]/10 group-hover:bg-black/35 flex items-center justify-center pointer-events-none transition-colors">
+              <span className="material-symbols-outlined text-[#0051d5] group-hover:text-white text-[24px] transition-colors">
+                fullscreen
               </span>
             </div>
             <div className="absolute bottom-1 right-1 bg-white/90 backdrop-blur rounded px-1 flex items-center shadow-xs">
               <span className="material-symbols-outlined text-[12px] text-[#069669]">verified</span>
             </div>
-          </div>
+          </button>
 
           {/* AI Classification Metadata Header */}
           <div className="flex flex-col min-w-0 flex-1">
@@ -87,15 +135,18 @@ export const DossierScreen: React.FC<DossierScreenProps> = ({
       </section>
 
       {/* System ID Strip */}
-      <div className="bg-[#e8e7f1] rounded-xl px-4 py-3 flex items-center justify-between border border-[#c6c6ca]/40">
+      <div
+        onClick={() => handleCopy('Asset ID', unifiedAssetId)}
+        className="bg-[#e8e7f1] rounded-xl px-4 py-3 flex items-center justify-between border border-[#c6c6ca]/40 cursor-pointer hover:bg-[#e3e1ec] transition-colors"
+      >
         <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-[17px] text-[#45474a]">fingerprint</span>
+          <span className="material-symbols-outlined text-[17px] text-[#0051d5]">fingerprint</span>
           <span className="font-mono text-[10px] text-[#45474a] uppercase tracking-wider font-semibold">
             Assigned Vault Asset ID
           </span>
         </div>
-        <span className="font-mono text-[13px] text-[#1a1b22] font-bold bg-white px-2.5 py-0.5 rounded-lg shadow-sm border border-[#c6c6ca]/40">
-          {currentDossier.code}
+        <span className="font-mono text-[13px] text-[#0051d5] font-bold bg-white px-2.5 py-0.5 rounded-lg shadow-sm border border-[#c6c6ca]/40 tabular-nums">
+          {unifiedAssetId}
         </span>
       </div>
 
@@ -104,25 +155,25 @@ export const DossierScreen: React.FC<DossierScreenProps> = ({
         <div className="px-4 py-3 bg-[#f4f2fd] flex items-center justify-between border-b border-[#e3e1ec]">
           <span className="font-semibold text-[14px] text-[#1a1b22]">Digital Twin Dossier</span>
           <span className="font-mono text-[10px] text-[#45474a] font-semibold">
-            12 PARAMETERS EXTRACTED
+            13 PARAMETERS EXTRACTED
           </span>
         </div>
 
         {/* Field Rows */}
         <div className="flex flex-col divide-y divide-[#eeedf7]">
-          {/* Serial No */}
+          {/* Asset ID */}
           <div
-            onClick={() => handleCopy('Serial No', currentDossier.serialNumber || currentDossier.code)}
+            onClick={() => handleCopy('Asset ID', unifiedAssetId)}
             className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-[#f4f2fd]/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2 min-w-0">
               <span className="material-symbols-outlined text-[16px] text-[#45474a] shrink-0">
                 tag
               </span>
-              <span className="text-[12px] font-medium text-[#45474a]">Serial Number</span>
+              <span className="text-[12px] font-medium text-[#45474a]">Asset ID</span>
             </div>
-            <span className="font-mono text-[12px] text-[#1a1b22] text-right font-bold truncate">
-              {currentDossier.serialNumber || currentDossier.code}
+            <span className="font-mono text-[12px] text-[#0051d5] text-right font-bold tabular-nums truncate">
+              {unifiedAssetId}
             </span>
           </div>
 
@@ -229,7 +280,50 @@ export const DossierScreen: React.FC<DossierScreenProps> = ({
             </span>
           </div>
 
-          {/* Expiration Date */}
+          {/* Purchase Date (Ownership) */}
+          <div
+            onClick={() =>
+              handleCopy(
+                'Purchase Date',
+                currentDossier.purchaseDate || currentDossier.boughtDate || 'N/A'
+              )
+            }
+            className="px-4 py-2.5 bg-[#f4f2fd]/30 flex items-center justify-between gap-3 hover:bg-[#f4f2fd] transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-[16px] text-[#0051d5] shrink-0">
+                calendar_today
+              </span>
+              <span className="text-[12px] font-medium text-[#45474a]">
+                Purchase Date (Ownership)
+              </span>
+            </div>
+            <span className="font-mono text-[12px] font-semibold text-[#1a1b22]">
+              {currentDossier.purchaseDate || currentDossier.boughtDate || 'N/A'}
+            </span>
+          </div>
+
+          {/* Manufacturing Date (MFD) */}
+          <div
+            onClick={() =>
+              handleCopy('Manufacturing Date', currentDossier.manufacturingDate || 'N/A')
+            }
+            className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-[#f4f2fd]/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-[16px] text-[#45474a] shrink-0">
+                precision_manufacturing
+              </span>
+              <span className="text-[12px] font-medium text-[#45474a]">
+                Manufacturing Date (MFD)
+              </span>
+            </div>
+            <span className="font-mono text-[12px] text-[#1a1b22]">
+              {currentDossier.manufacturingDate || 'N/A'}
+            </span>
+          </div>
+
+          {/* Expiration Date (Medicines / Food / Consumables) */}
           <div
             onClick={() => handleCopy('Expiry Date', currentDossier.expiresDate || 'N/A')}
             className="px-4 py-2.5 bg-[#f4f2fd]/30 flex items-center justify-between gap-3 hover:bg-[#f4f2fd] transition-colors cursor-pointer"
@@ -238,47 +332,120 @@ export const DossierScreen: React.FC<DossierScreenProps> = ({
               <span className="material-symbols-outlined text-[16px] text-[#45474a] shrink-0">
                 event_available
               </span>
-              <span className="text-[12px] font-medium text-[#45474a]">Expiry Date</span>
+              <span className="text-[12px] font-medium text-[#45474a]">
+                Expiry Date (Meds / Food)
+              </span>
             </div>
-            <span className="font-mono text-[12px] text-[#1a1b22]">
+            <span
+              className={`font-mono text-[12px] ${
+                currentDossier.expiresDate && currentDossier.expiresDate !== 'N/A'
+                  ? 'text-amber-800 font-semibold'
+                  : 'text-[#1a1b22]'
+              }`}
+            >
               {currentDossier.expiresDate || 'N/A'}
             </span>
           </div>
 
-          {/* Purchase Date */}
-          <div
-            onClick={() => handleCopy('Purchase Date', currentDossier.purchaseDate || currentDossier.boughtDate || 'N/A')}
-            className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-[#f4f2fd]/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="material-symbols-outlined text-[16px] text-[#45474a] shrink-0">
-                calendar_today
-              </span>
-              <span className="text-[12px] font-medium text-[#45474a]">Purchase Date</span>
+          {/* Manual Storage Location & Box No (with direct inline update) */}
+          <div className="px-4 py-2.5 bg-[#f4f2fd]/30 flex flex-col gap-2 hover:bg-[#f4f2fd] transition-colors">
+            <div className="flex items-start justify-between gap-3">
+              <div
+                onClick={() => handleCopy('Manual Location', currentDossier.location || 'Personal Vault')}
+                className="flex items-center gap-2 min-w-0 pt-0.5 shrink-0 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px] text-[#45474a] shrink-0">
+                  inventory_2
+                </span>
+                <span className="text-[12px] font-medium text-[#45474a]">Manual Location (Storage)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end">
+                  <span className="font-mono text-[12px] text-[#1a1b22] text-right font-semibold">
+                    {currentDossier.location || 'Personal Vault'}
+                  </span>
+                  {currentDossier.boxNumber && currentDossier.boxNumber !== 'N/A' && (
+                    <span className="font-mono text-[10px] text-[#45474a] text-right">
+                      {currentDossier.boxNumber}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualLocDraft(currentDossier.location || 'Personal Vault');
+                    setIsEditingManualLoc((prev) => !prev);
+                  }}
+                  title="Manually update storage location"
+                  className="h-7 px-2 rounded-lg bg-[#e8eaf6] hover:bg-[#dbe1ff] text-[#0051d5] font-mono text-[10px] font-semibold flex items-center gap-1 shrink-0 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[13px]">edit_location_alt</span>
+                  <span>Update</span>
+                </button>
+              </div>
             </div>
-            <span className="font-mono text-[12px] text-[#1a1b22]">
-              {currentDossier.purchaseDate || currentDossier.boughtDate || 'N/A'}
-            </span>
+
+            {isEditingManualLoc && (
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="text"
+                  value={manualLocDraft}
+                  onChange={(e) => setManualLocDraft(e.target.value)}
+                  placeholder="Enter manual storage location (e.g. Bedroom Closet)"
+                  className="flex-1 h-9 px-3 bg-white rounded-xl border border-[#0051d5]/40 text-[12px] text-[#1a1b22] outline-none focus:ring-2 focus:ring-[#0051d5]/25"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveInlineManualLocation}
+                  className="h-9 px-3 rounded-xl bg-[#0051d5] hover:bg-[#316bf3] text-white font-semibold text-[11px] shrink-0"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingManualLoc(false)}
+                  className="h-9 px-2.5 rounded-xl bg-[#eeedf7] text-[#45474a] font-medium text-[11px] shrink-0"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Box No & Storage Location */}
+          {/* Captured Geo Location (Photo Taken - Street, neighborhood, city, and state) */}
           <div
-            onClick={() => handleCopy('Location', currentDossier.location || 'Personal Vault')}
-            className="px-4 py-2.5 bg-[#f4f2fd]/30 flex items-start justify-between gap-3 hover:bg-[#f4f2fd] transition-colors cursor-pointer"
+            onClick={() =>
+              currentDossier.geoLocation && handleCopy('Geo Location', currentDossier.geoLocation)
+            }
+            className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-[#f4f2fd]/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2 min-w-0 pt-0.5 shrink-0">
-              <span className="material-symbols-outlined text-[16px] text-[#45474a] shrink-0">
-                inventory_2
+              <span className="material-symbols-outlined text-[16px] text-[#0051d5] shrink-0">
+                location_on
               </span>
-              <span className="text-[12px] font-medium text-[#45474a]">Box No. &amp; Location</span>
+              <span className="text-[12px] font-medium text-[#45474a]">Geo Location (Photo Taken)</span>
             </div>
-            <div className="flex flex-col items-end">
-              <span className="font-mono text-[12px] text-[#1a1b22] text-right font-medium">
-                {currentDossier.boxNumber && currentDossier.boxNumber !== 'N/A' ? currentDossier.boxNumber : 'Box: N/A'}
+            <div className="flex items-center gap-2 min-w-0 justify-end">
+              <span className="font-mono text-[11px] text-[#1a1b22] text-right break-words max-w-[230px]">
+                {currentDossier.geoLocation || 'Not captured yet'}
               </span>
-              <span className="font-mono text-[11px] text-[#45474a] text-right">
-                {currentDossier.location || 'Personal Vault'}
-              </span>
+              <button
+                type="button"
+                onClick={handleDetectDossierGeo}
+                disabled={isDetectingGeo}
+                title="Detect or refresh current GPS Geo Location"
+                className="h-7 px-2 rounded-lg bg-[#e8eaf6] hover:bg-[#dbe1ff] text-[#0051d5] font-mono text-[10px] font-semibold flex items-center gap-1 shrink-0 transition-colors disabled:opacity-50"
+              >
+                <span
+                  className={`material-symbols-outlined text-[13px] ${
+                    isDetectingGeo ? 'animate-spin' : ''
+                  }`}
+                >
+                  {isDetectingGeo ? 'progress_activity' : 'my_location'}
+                </span>
+                <span>{currentDossier.geoLocation ? 'Refresh' : 'Detect'}</span>
+              </button>
             </div>
           </div>
 

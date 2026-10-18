@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, doublePrecision, integer } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Users table mapping Firebase UID to PostgreSQL
@@ -29,6 +29,7 @@ export const inventoryItems = pgTable('inventory_items', {
   boughtDate: text('bought_date'),
   condition: text('condition'),
   location: text('location'),
+  geoLocation: text('geo_location'),
   imageUrl: text('image_url').notNull(),
   imageAlt: text('image_alt'),
   serialNumber: text('serial_number'),
@@ -38,6 +39,7 @@ export const inventoryItems = pgTable('inventory_items', {
   quantity: text('quantity'),
   boxNumber: text('box_number'),
   purchaseDate: text('purchase_date'),
+  manufacturingDate: text('manufacturing_date'),
   notes: text('notes'),
   priceSource: text('price_source'),
   expiresDate: text('expires_date'),
@@ -52,6 +54,21 @@ export const inventoryItems = pgTable('inventory_items', {
   batch: text('batch'),
   rfid: text('rfid'),
   firmware: text('firmware'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Dedicated High-Resolution Asset Image Table in PostgreSQL
+export const assetImages = pgTable('asset_images', {
+  itemId: text('item_id').primaryKey(),
+  userId: text('user_id')
+    .references(() => users.uid, { onDelete: 'cascade' })
+    .notNull(),
+  mimeType: text('mime_type').notNull().default('image/jpeg'),
+  imageData: text('image_data').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  sizeBytes: integer('size_bytes'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -83,11 +100,19 @@ export const archiveItems = pgTable('archive_items', {
 export const usersRelations = relations(users, ({ many }) => ({
   inventory: many(inventoryItems),
   archive: many(archiveItems),
+  images: many(assetImages),
 }));
 
 export const inventoryRelations = relations(inventoryItems, ({ one }) => ({
   user: one(users, {
     fields: [inventoryItems.userId],
+    references: [users.uid],
+  }),
+}));
+
+export const assetImagesRelations = relations(assetImages, ({ one }) => ({
+  user: one(users, {
+    fields: [assetImages.userId],
     references: [users.uid],
   }),
 }));
@@ -98,3 +123,4 @@ export const archiveRelations = relations(archiveItems, ({ one }) => ({
     references: [users.uid],
   }),
 }));
+

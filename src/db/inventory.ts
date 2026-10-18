@@ -1,7 +1,157 @@
 import { db } from './index.ts';
-import { inventoryItems, archiveItems } from './schema.ts';
+import { inventoryItems, archiveItems, assetImages } from './schema.ts';
 import { eq, and, desc } from 'drizzle-orm';
 import { InventoryItem, ArchiveItem } from '../types/inventory.ts';
+
+export interface AssetImageRecord {
+  itemId: string;
+  userId: string;
+  mimeType: string;
+  imageData: string;
+  width?: number | null;
+  height?: number | null;
+  sizeBytes?: number | null;
+  isHighRes: boolean;
+}
+
+export async function upsertAssetImage(
+  userId: string,
+  payload: {
+    itemId: string;
+    imageData: string;
+    mimeType?: string;
+    width?: number;
+    height?: number;
+    sizeBytes?: number;
+  }
+) {
+  try {
+    let mimeType = payload.mimeType || 'image/jpeg';
+    if (payload.imageData.startsWith('data:')) {
+      const match = payload.imageData.match(/^data:([^;]+);base64,/);
+      if (match) mimeType = match[1];
+    }
+    const sizeBytes =
+      payload.sizeBytes ??
+      Math.round((payload.imageData.length * 3) / 4);
+
+    const record = {
+      itemId: payload.itemId,
+      userId,
+      mimeType,
+      imageData: payload.imageData,
+      width: payload.width ?? null,
+      height: payload.height ?? null,
+      sizeBytes,
+      updatedAt: new Date(),
+    };
+
+    await db
+      .insert(assetImages)
+      .values(record)
+      .onConflictDoUpdate({
+        target: assetImages.itemId,
+        set: record,
+      });
+
+    return true;
+  } catch (error) {
+    console.error('Failed to upsert asset image:', error);
+    return false;
+  }
+}
+
+export async function getAssetImage(itemId: string): Promise<AssetImageRecord | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(assetImages)
+      .where(eq(assetImages.itemId, itemId))
+      .limit(1);
+
+    if (rows.length > 0) {
+      const r = rows[0];
+      return {
+        itemId: r.itemId,
+        userId: r.userId,
+        mimeType: r.mimeType || 'image/jpeg',
+        imageData: r.imageData,
+        width: r.width,
+        height: r.height,
+        sizeBytes: r.sizeBytes,
+        isHighRes: true,
+      };
+    }
+
+    // Fallback to inventory_items thumbnail if no dedicated high-res record exists yet
+    const invRows = await db
+      .select({
+        id: inventoryItems.id,
+        userId: inventoryItems.userId,
+        imageUrl: inventoryItems.imageUrl,
+      })
+      .from(inventoryItems)
+      .where(eq(inventoryItems.id, itemId))
+      .limit(1);
+
+    if (
+      invRows.length > 0 &&
+      invRows[0].imageUrl &&
+      !invRows[0].imageUrl.startsWith('/api/images/')
+    ) {
+      const img = invRows[0].imageUrl;
+      let mimeType = 'image/jpeg';
+      if (img.startsWith('data:')) {
+        const match = img.match(/^data:([^;]+);base64,/);
+        if (match) mimeType = match[1];
+      }
+      return {
+        itemId: invRows[0].id,
+        userId: invRows[0].userId,
+        mimeType,
+        imageData: img,
+        width: null,
+        height: null,
+        sizeBytes: img.startsWith('data:') ? Math.round((img.length * 3) / 4) : null,
+        isHighRes: false,
+      };
+    }
+
+    // Fallback to archive_items thumbnail
+    const archRows = await db
+      .select({
+        id: archiveItems.id,
+        userId: archiveItems.userId,
+        imageUrl: archiveItems.imageUrl,
+      })
+      .from(archiveItems)
+      .where(eq(archiveItems.id, itemId))
+      .limit(1);
+
+    if (
+      archRows.length > 0 &&
+      archRows[0].imageUrl &&
+      !archRows[0].imageUrl.startsWith('/api/images/')
+    ) {
+      const img = archRows[0].imageUrl;
+      return {
+        itemId: archRows[0].id,
+        userId: archRows[0].userId,
+        mimeType: 'image/jpeg',
+        imageData: img,
+        width: null,
+        height: null,
+        sizeBytes: img.startsWith('data:') ? Math.round((img.length * 3) / 4) : null,
+        isHighRes: false,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Failed to fetch asset image:', error);
+    return null;
+  }
+}
 
 export async function getUserInventory(userId: string): Promise<InventoryItem[]> {
   try {
@@ -24,10 +174,15 @@ export async function getUserInventory(userId: string): Promise<InventoryItem[]>
       value: r.value ?? 0,
       boughtDate: r.boughtDate || '',
       purchaseDate: r.purchaseDate || undefined,
+      manufacturingDate: r.manufacturingDate || undefined,
       condition: r.condition || undefined,
       location: r.location || undefined,
-      imageUrl: r.imageUrl,
+      geoLocation: r.geoLocation || undefined,
+      imageUrl: r.imageUrl?.startsWith('data:')
+        ? `/api/images/${encodeURIComponent(r.id)}`
+        : r.imageUrl,
       imageAlt: r.imageAlt || r.name,
+      highResImageUrl: `/api/images/${encodeURIComponent(r.id)}`,
       serialNumber: r.serialNumber || undefined,
       description: r.description || undefined,
       brand: r.brand || undefined,
@@ -57,6 +212,34 @@ export async function getUserInventory(userId: string): Promise<InventoryItem[]>
 
 export async function upsertInventoryItem(userId: string, item: InventoryItem) {
   try {
+    const apiImagePath = `/api/images/${encodeURIComponent(item.id)}`;
+    const hasInlineDataImage = Boolean(item.imageUrl && item.imageUrl.startsWith('data:'));
+    const hasInlineHighRes = Boolean(
+      item.highResImageUrl && item.highResImageUrl.startsWith('data:')
+    );
+
+    // Persist inline base64 image into dedicated asset_images table first
+    if (hasInlineHighRes && item.highResImageUrl) {
+      await upsertAssetImage(userId, {
+        itemId: item.id,
+        imageData: item.highResImageUrl,
+      });
+    } else if (hasInlineDataImage && item.imageUrl) {
+      const existingImg = await db
+        .select({ itemId: assetImages.itemId })
+        .from(assetImages)
+        .where(eq(assetImages.itemId, item.id))
+        .limit(1);
+      if (existingImg.length === 0) {
+        await upsertAssetImage(userId, {
+          itemId: item.id,
+          imageData: item.imageUrl,
+        });
+      }
+    }
+
+    const storedImageUrl = hasInlineDataImage ? apiImagePath : item.imageUrl || apiImagePath;
+
     const record = {
       id: item.id,
       userId,
@@ -71,9 +254,11 @@ export async function upsertInventoryItem(userId: string, item: InventoryItem) {
       value: item.value ?? 0,
       boughtDate: item.boughtDate || null,
       purchaseDate: item.purchaseDate || null,
+      manufacturingDate: item.manufacturingDate || null,
       condition: item.condition || null,
       location: item.location || null,
-      imageUrl: item.imageUrl,
+      geoLocation: item.geoLocation || null,
+      imageUrl: storedImageUrl,
       imageAlt: item.imageAlt || item.name,
       serialNumber: item.serialNumber || null,
       description: item.description || null,
@@ -106,7 +291,11 @@ export async function upsertInventoryItem(userId: string, item: InventoryItem) {
         set: record,
       });
 
-    return item;
+    return {
+      ...item,
+      imageUrl: storedImageUrl,
+      highResImageUrl: apiImagePath,
+    };
   } catch (error) {
     console.error('Failed to upsert inventory item:', error);
     throw new Error('Database save failed.', { cause: error });
@@ -207,6 +396,9 @@ export async function deleteArchiveItem(userId: string, itemId: string) {
     await db
       .delete(archiveItems)
       .where(and(eq(archiveItems.userId, userId), eq(archiveItems.id, itemId)));
+    await db
+      .delete(assetImages)
+      .where(and(eq(assetImages.userId, userId), eq(assetImages.itemId, itemId)));
   } catch (error) {
     console.error('Failed to delete archive item:', error);
     throw new Error('Database delete failed.', { cause: error });
@@ -223,3 +415,4 @@ export async function purgeAllUserArchive(userId: string) {
     throw new Error('Database purge failed.', { cause: error });
   }
 }
+

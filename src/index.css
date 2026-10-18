@@ -8,6 +8,14 @@
     background-color: #fbf8ff;
     color: #1a1b22;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.dark,
+  html.dark body {
+    background-color: #0b0d13;
+    color: #f3f4f8;
+    color-scheme: dark;
   }
   
   body {
@@ -18,6 +26,209 @@
   .font-mono, [data-mono="true"] {
     font-family: 'JetBrains Mono', monospace;
   }
+}
+
+/* ============================================================================
+   Obsidian / Carbon Slate Dark Mode System (html.dark)
+   Provides high-contrast dark surfaces, 1px slate borders, legible typography,
+   and semantic status badges across both Mobile and Desktop Command Center UI.
+   ============================================================================ */
+
+/* Primary App Canvas & Backdrop Surfaces */
+html.dark .bg-\[\#fbf8ff\] {
+  background-color: #0b0d13 !important;
+}
+html.dark .bg-\[\#fbf8ff\]\/85,
+html.dark .bg-\[\#fbf8ff\]\/90 {
+  background-color: rgba(11, 13, 19, 0.88) !important;
+}
+
+/* Elevated Card, Table, Sidebar, Drawer, and Modal Surfaces */
+html.dark .bg-white {
+  background-color: #131620 !important;
+}
+html.dark .bg-white\/90,
+html.dark .bg-white\/95 {
+  background-color: rgba(19, 22, 32, 0.94) !important;
+}
+
+/* Secondary / Muted Containers & Interactive Surface States */
+html.dark .bg-\[\#f4f2fd\],
+html.dark .bg-\[\#f4f2fd\]\/30,
+html.dark .bg-\[\#f4f2fd\]\/40,
+html.dark .bg-\[\#f4f2fd\]\/50,
+html.dark .bg-\[\#f4f2fd\]\/60,
+html.dark .bg-\[\#f4f2fd\]\/70,
+html.dark .bg-\[\#f4f2fd\]\/80,
+html.dark .bg-\[\#f8f7fd\] {
+  background-color: #1a1e2c !important;
+}
+
+html.dark .bg-\[\#eeedf7\],
+html.dark .bg-\[\#eeedf7\]\/60,
+html.dark .bg-\[\#eeedf7\]\/70,
+html.dark .bg-\[\#e8e7f1\],
+html.dark .bg-\[\#e8e7f1\]\/60,
+html.dark .bg-\[\#e8e7f1\]\/80,
+html.dark .bg-\[\#eae8f7\],
+html.dark .bg-\[\#dcdce5\] {
+  background-color: #212636 !important;
+}
+
+html.dark .bg-\[\#e3e1ec\],
+html.dark .bg-\[\#e3e1ec\]\/60,
+html.dark .bg-\[\#e3e1ec\]\/80 {
+  background-color: #2c3347 !important;
+}
+
+html.dark .bg-\[\#dbe1ff\],
+html.dark .bg-\[\#dbe1ff\]\/50,
+html.dark .bg-\[\#dbe1ff\]\/60,
+html.dark .bg-\[\#e8eaf6\] {
+  background-color: rgba(59, 130, 246, 0.18) !important;
+}
+
+/* Dark Buttons that were #121417 in Light Mode -> Crisp Slate/Blue in Dark Mode */
+html.dark .bg-\[\#121417\] {
+  background-color: #252b3d !important;
+  border-color: #343c54 !important;
+}
+html.dark .hover\:bg-\[\#2f3038\]:hover {
+  background-color: #30384f !important;
+}
+
+/* Hover Surface Transitions */
+html.dark .hover\:bg-\[\#f4f2fd\]:hover,
+html.dark .hover\:bg-\[\#f8f7fd\]:hover,
+html.dark .hover\:bg-\[\#eeedf7\]:hover,
+html.dark .hover\:bg-\[\#eeedf7\]\/70:hover,
+html.dark .hover\:bg-\[\#e8e7f1\]:hover,
+html.dark .hover\:bg-white:hover {
+  background-color: #202535 !important;
+}
+html.dark .hover\:bg-\[\#dbe1ff\]:hover,
+html.dark .hover\:bg-\[\#dbe1ff\]\/60:hover {
+  background-color: rgba(59, 130, 246, 0.28) !important;
+}
+
+/* Typography Hierarchy */
+html.dark .text-\[\#1a1b22\],
+html.dark .text-\[\#121417\] {
+  color: #f3f4f8 !important;
+}
+html.dark .text-\[\#45474a\] {
+  color: #9ca3b8 !important;
+}
+html.dark .text-\[\#76777d\] {
+  color: #6e768c !important;
+}
+html.dark .text-\[\#0051d5\] {
+  color: #60a5fa !important;
+}
+html.dark .hover\:text-\[\#1a1b22\]:hover {
+  color: #ffffff !important;
+}
+html.dark .hover\:text-\[\#0051d5\]:hover {
+  color: #93c5fd !important;
+}
+
+/* Structural Hairline Borders & Dividers */
+html.dark .border-\[\#e3e1ec\],
+html.dark .border-\[\#e3e1ec\]\/60,
+html.dark .border-\[\#e3e1ec\]\/80,
+html.dark .border-\[\#eeedf7\],
+html.dark .border-\[\#c6c6ca\],
+html.dark .border-\[\#c6c6ca\]\/60,
+html.dark .border-\[\#c6c6ca\]\/80 {
+  border-color: #242938 !important;
+}
+html.dark .divide-\[\#eeedf7\] > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-\[\#e3e1ec\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1f2433 !important;
+}
+
+/* Semantic Status Badges (Emerald / Blue / Amber / Red) in Dark Mode */
+html.dark .bg-\[\#ecfdf5\],
+html.dark .bg-\[\#ecfdf5\]\/60,
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-50\/60,
+html.dark .bg-emerald-50\/70 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+}
+html.dark .border-\[\#a7f3d0\],
+html.dark .border-emerald-200 {
+  border-color: rgba(16, 185, 129, 0.32) !important;
+}
+html.dark .text-\[\#069669\],
+html.dark .text-\[\#047857\],
+html.dark .text-\[\#059669\],
+html.dark .text-emerald-700,
+html.dark .text-emerald-800,
+html.dark .text-emerald-950 {
+  color: #34d399 !important;
+}
+
+html.dark .bg-\[\#eff6ff\],
+html.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+html.dark .border-\[\#bfdbfe\],
+html.dark .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.32) !important;
+}
+html.dark .text-\[\#1d4ed8\],
+html.dark .text-\[\#2563eb\],
+html.dark .text-blue-700 {
+  color: #60a5fa !important;
+}
+
+html.dark .bg-\[\#fffbeb\],
+html.dark .bg-\[\#fef3c7\],
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/70 {
+  background-color: rgba(245, 158, 11, 0.14) !important;
+}
+html.dark .border-\[\#fde68a\],
+html.dark .border-amber-200 {
+  border-color: rgba(245, 158, 11, 0.32) !important;
+}
+html.dark .text-\[\#b45309\],
+html.dark .text-\[\#d97706\],
+html.dark .text-\[\#92400e\],
+html.dark .text-amber-700,
+html.dark .text-amber-800,
+html.dark .text-amber-900 {
+  color: #fbbf24 !important;
+}
+
+html.dark .bg-\[\#fef2f2\],
+html.dark .bg-\[\#ffdad6\],
+html.dark .bg-\[\#ffdad6\]\/50,
+html.dark .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+html.dark .border-\[\#fecaca\],
+html.dark .border-red-200 {
+  border-color: rgba(239, 68, 68, 0.32) !important;
+}
+html.dark .text-\[\#dc2626\],
+html.dark .text-\[\#b91c1c\],
+html.dark .text-\[\#ba1a1a\],
+html.dark .text-\[\#93000a\],
+html.dark .text-red-600,
+html.dark .text-red-700 {
+  color: #f87171 !important;
+}
+
+/* Inputs, Selects, and Textareas in Dark Mode */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  color: #f3f4f8;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6e768c !important;
 }
 
 /* Material Symbols Outlined settings */

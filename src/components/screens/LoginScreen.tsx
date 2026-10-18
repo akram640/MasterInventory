@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 interface LoginScreenProps {
   onOpenPhoneModal: () => void;
@@ -7,6 +8,7 @@ interface LoginScreenProps {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onOpenPhoneModal }) => {
   const { loginWithGoogle, loginWithEmail, signupWithEmail, loginAsDemo, isLoading } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +46,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onOpenPhoneModal }) =>
   };
 
   return (
-    <div className="min-h-screen bg-[#fbf8ff] flex flex-col justify-center items-center px-4 py-12 select-none">
+    <div className="min-h-screen bg-[#fbf8ff] flex flex-col justify-center items-center px-4 py-12 select-none relative">
+      {/* Top-Right Theme Toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          className="h-9 px-3 rounded-xl bg-white hover:bg-[#f4f2fd] border border-[#e3e1ec] text-[#1a1b22] font-medium text-[12px] flex items-center gap-1.5 shadow-sm transition-colors"
+        >
+          <span className="material-symbols-outlined text-[17px] text-[#0051d5]">
+            {isDark ? 'light_mode' : 'dark_mode'}
+          </span>
+          <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+        </button>
+      </div>
+
       <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-[#e3e1ec] flex flex-col gap-5">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center gap-2">

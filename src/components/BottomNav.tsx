@@ -8,7 +8,7 @@ interface BottomNavProps {
 
 export const BottomNav: React.FC<BottomNavProps> = ({ currentScreen, onNavigate }) => {
   return (
-    <nav className="fixed bottom-0 w-full z-50 bg-[#fbf8ff]/90 backdrop-blur-xl border-t border-[#e3e1ec]/80 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
+    <nav className="lg:hidden fixed bottom-0 w-full z-50 bg-[#fbf8ff]/90 backdrop-blur-xl border-t border-[#e3e1ec]/80 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
       <div className="max-w-2xl mx-auto h-16 px-4 flex items-center justify-around">
         {/* Tab 1: Home */}
         <button

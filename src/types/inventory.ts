@@ -24,10 +24,13 @@ export interface InventoryItem {
   value: number; // Purchase price / valuation in ₹ INR
   boughtDate: string;
   purchaseDate?: string;
+  manufacturingDate?: string;
   condition?: string;
   location?: string;
+  geoLocation?: string;
   imageUrl: string;
   imageAlt: string;
+  highResImageUrl?: string;
   // Granular identification & physical attributes
   serialNumber?: string;
   description?: string;

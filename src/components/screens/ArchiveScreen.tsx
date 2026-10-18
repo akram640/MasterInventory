@@ -8,6 +8,7 @@ interface ArchiveScreenProps {
   onPurgeItem: (itemId: string) => void;
   onPurgeAll: () => void;
   onNavigate: (screen: ScreenType) => void;
+  onInspectImage?: (item: ArchiveItem) => void;
 }
 
 export const ArchiveScreen: React.FC<ArchiveScreenProps> = ({
@@ -15,6 +16,7 @@ export const ArchiveScreen: React.FC<ArchiveScreenProps> = ({
   onRestoreItem,
   onPurgeItem,
   onPurgeAll,
+  onInspectImage,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'consumed' | 'sold' | 'discarded'>('all');
   const [selectedHistoricalItem, setSelectedHistoricalItem] = useState<ArchiveItem | null>(null);
@@ -63,7 +65,7 @@ export const ArchiveScreen: React.FC<ArchiveScreenProps> = ({
   };
 
   return (
-    <div className="flex flex-col w-full max-w-2xl mx-auto px-4 pt-20 pb-28 gap-4 select-none">
+    <div className="flex flex-col w-full max-w-2xl lg:max-w-none mx-auto px-4 lg:px-8 pt-20 lg:pt-6 pb-28 lg:pb-12 gap-4 select-none">
       {/* Title & Introduction Header */}
       <section className="flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
@@ -176,9 +178,9 @@ export const ArchiveScreen: React.FC<ArchiveScreenProps> = ({
       </section>
 
       {/* Archive Item Cards */}
-      <section className="flex flex-col gap-3.5">
+      <section className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
         {filteredItems.length === 0 ? (
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-[#e3e1ec] flex flex-col items-center justify-center text-center gap-2.5 py-10">
+          <div className="xl:col-span-2 bg-white p-8 rounded-2xl shadow-sm border border-[#e3e1ec] flex flex-col items-center justify-center text-center gap-2.5 py-10">
             <div className="w-12 h-12 rounded-2xl bg-[#eeedf7] flex items-center justify-center text-[#45474a]">
               <span className="material-symbols-outlined text-[26px]">archive</span>
             </div>
@@ -196,14 +198,26 @@ export const ArchiveScreen: React.FC<ArchiveScreenProps> = ({
               className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3 transition-all relative overflow-hidden border border-[#e3e1ec]"
             >
               <div className="flex items-start gap-3.5">
-                <div className="w-16 h-16 rounded-xl bg-[#eeedf7] shrink-0 overflow-hidden relative border border-[#c6c6ca]/40">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInspectImage?.(record);
+                  }}
+                  title="Click to inspect full-screen image"
+                  className="w-16 h-16 rounded-xl bg-[#eeedf7] shrink-0 overflow-hidden relative border border-[#c6c6ca]/40 group cursor-zoom-in"
+                >
                   <img
                     src={record.imageUrl}
                     alt={record.imageAlt || record.name}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/10" />
-                </div>
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/35 flex items-center justify-center transition-colors">
+                    <span className="material-symbols-outlined text-white text-[18px] opacity-0 group-hover:opacity-100">
+                      fullscreen
+                    </span>
+                  </div>
+                </button>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">

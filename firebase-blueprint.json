@@ -31,6 +31,7 @@
         "boughtDate": { "type": "string", "maxLength": 64 },
         "condition": { "type": "string", "maxLength": 64 },
         "location": { "type": "string", "maxLength": 256 },
+        "geoLocation": { "type": "string", "maxLength": 512 },
         "imageUrl": { "type": "string", "maxLength": 2048 },
         "imageAlt": { "type": "string", "maxLength": 512 },
         "serialNumber": { "type": "string", "maxLength": 128 },

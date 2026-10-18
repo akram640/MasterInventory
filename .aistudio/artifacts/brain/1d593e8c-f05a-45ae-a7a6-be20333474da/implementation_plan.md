@@ -1,152 +1,102 @@
-# Multimodal AI Vision Ingestion & Intelligent Auto-Fill Architecture
+# Uniform Unique Asset ID Generation & Ledger Unification
 
-Implement a Gemini-powered visual intelligence pipeline in OmniVault that inspects physical camera captures and uploaded product screenshots, extracts structured inventory attributes (Serial No., Category, Sub-category, Brand, Quantity, Expiry, Condition, Description, and Notes), estimates real-time Indian retail market valuation via Google Search grounding, and presents an interactive verification form before persisting to the unified master database.
+Establish a deterministic, collision-free **Asset ID** format (`CAT-YYMMDD-HASH`, e.g., `ELE-261017-8F2A`) across OmniVault, unify the separate `S.No` and secondary `#CODE` fields into a single canonical **Asset ID**, and automatically migrate all existing assets so every item in the ledger has a clean, unique identifier.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following decisions were confirmed during the interactive Phase 1 consultation:
-> - **Unified Master Schema**: The inventory database will maintain a single unified master table with comprehensive polymorphic columns and category attributes, avoiding siloed tables while preserving cross-category filtering, unified ledger telemetry, and searchability.
-> - **AI Valuation with Google Search Grounding**: When item price is absent from packaging, Gemini will search Indian retail sources (e.g., Croma, Amazon.in, Flipkart, 1mg) to supply real-time ₹ INR price estimates with source provenance, while keeping the field fully editable by the user.
-> - **Instant Verification Form**: Immediately upon optical capture, the app displays a full verification modal with live AI extraction badges, allowing the operator to review, tweak, and approve all extracted fields prior to vault persistence.
+> The following architectural and UX decisions have been confirmed and will govern the implementation:
+
+- **Confirmed Decision 1 — Uniform Asset ID Format**: Every asset will use the structured **Category + Date + Unique Hash** format (`CAT-YYMMDD-HASH`, such as `ELE-261017-8F2A`, `MED-261017-3C9D`, `HOM-261017-7A1B`), combining a 3-letter canonical category prefix, a 6-digit date stamp (`YYMMDD`), and a deterministic 4-character uppercase hexadecimal fingerprint.
+- **Confirmed Decision 2 — Automatic Migration of Existing Assets**: All existing assets with duplicate numbers (such as multiple `1`s), raw batch strings (`MQ08BGB`), or legacy codes (`#HOM-9908`) will be automatically normalized to the new `CAT-YYMMDD-HASH` format and persisted back to PostgreSQL and cloud sync.
+- **Confirmed Decision 3 — Unified Single Asset ID Display**: `S.No` and `code` will be unified into a single **Asset ID** column in the Inventory Ledger and across all cards, scanner review sheets, and Dossier views—eliminating redundant or conflicting secondary codes under the product brand.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: Transforms the OmniVault optical reticle camera from a basic photo-taker into an intelligent multimodal ingestion terminal. When the camera captures an object or packaging (such as pharmaceutical supplements, appliances, or electronics), the image is streamed to a secure server endpoint (`/api/ai/analyze-item`) running Gemini 3.8 Flash. The AI extracts 14 key asset attributes and estimates prevailing market prices in Indian Rupees (₹ INR).
-- **Target Audience / Persona**: Personal inventory managers, collectors, and household operators who want frictionless, zero-typing digitization of their physical belongings.
-- **Key Value**: Reduces cataloging time from minutes of manual typing to a 2-second snap-and-confirm workflow with zero error rate.
+- **What It Does**: Replaces inconsistent `S.No` values (`1`, `1`, `14`, `MQ08BGB`) and separate `#CAT-1234` tags with a single deterministic, human-readable, and globally unique **Asset ID** (`CAT-YYMMDD-HASH`).
+- **Target Audience / Persona**: Vault owners managing personal, household, medical, and electronics inventories across desktop and mobile who need reliable, scannable, and non-colliding asset identifiers.
+- **Key Value**: Guarantees 100% uniqueness across every cataloged item, encodes both the asset's category and ingestion/purchase date directly in the ID, and removes visual clutter from the product & brand column.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### Key User Flows
-
-1. **Optical Capture**: Operator points camera at an object or box (e.g., Cutihance Men bottle or Whirlpool washing machine) and taps the center shutter button (or uploads an image).
-2. **AI Analysis State**: The captured frame shows an animated scanning reticle with non-blocking feedback: *"AI Multimodal Analysis & Market Price Discovery in progress..."*.
-3. **Interactive Verification Form**: The Review Modal opens, showing:
-   - High-resolution preview of the captured photo.
-   - Auto-filled fields: **Serial No.**, **Product Name**, **Brand**, **Category**, **Sub-category**, **Quantity**, **Estimated Value (₹ INR)** with retail source tag, **Condition**, **Expiry Date**, **Box No**, **Description**, and **Notes**.
-   - Visual indicator showing AI confidence and fields auto-detected.
-   - Clean inline edit controls for every single field.
-4. **Approval & Vault Ledger Ingest**: Operator reviews or edits any field and taps **"Save to Vault"**. The asset is written to PostgreSQL (Cloud SQL) and Firestore, updating the dashboard valuation and inventory tables instantly.
-
-### Visual Identity & Theme
-- **Aesthetic Direction**: High-density Swiss utilitarian and technical cataloging. Crisp white surfaces (`#FFFFFF`), muted cool structural borders (`#E3E1EC`), deep carbon typography (`#1A1B22`), and high-intent electric cobalt accents (`#0051D5`).
-- **Typography & Hierarchy**:
-  - Display & Headings: `Plus Jakarta Sans` (SemiBold / Bold).
-  - Body & Form Controls: `DM Sans` / `Plus Jakarta Sans` (13px–14px, 1.5 line height).
-  - Metrics, Currencies, and Serial Keys: Monospace tabular numerals (`font-mono tabular-nums`).
-- **Zero-Pill Discipline**: Statuses and metadata use unboxed text with subtle typographic separators (`·` or `/`). No pill-badge sandwiches on cards or inputs.
-- **Motion & Latency**: Camera shutter triggers haptic chime; AI analysis state settles with smooth opacity transitions ($\le 200\text{ms}$).
+- **Key User Flows**:
+  1. **Automatic Ledger Normalization on Load**: When the vault loads or syncs, any asset lacking a valid `CAT-YYMMDD-HASH` identifier (or sharing a duplicate ID) is deterministically upgraded and synced in the background.
+  2. **Master Inventory Table & Grid Views**:
+     - The `S.No` column is updated to **Asset ID** with sufficient width (`min-w-[135px]`) to display the full monospace identifier (`ELE-261017-8F2A`) on a single line without wrapping.
+     - Under **Product & Brand**, the redundant `#CAT-1234` code next to the brand name is removed (displaying clean brand & sub-category metadata instead).
+  3. **AI Reticle Scanner & Ingestion**:
+     - When capturing a photo or changing the asset's category in the review modal, the assigned **Asset ID** updates dynamically to match the selected category, date, and unique asset seed.
+     - If Gemini OCR detects a manufacturer batch/lot code on packaging (e.g., `MQ08BGB`), it is preserved in the dedicated barcode/batch metadata rather than overwriting the Vault Asset ID.
+  4. **Live Dossier Inspector & Full Dossier Screen**:
+     - Displays the unified **Asset ID** in the header and system ID bar with one-click copy to clipboard.
+- **Visual Identity & Theme**:
+  - *Typography & Hierarchy*: Enforces `JetBrains Mono` (`font-mono tabular-nums`) at `11px`–`12px` with crisp letter-spacing for all Asset IDs so category prefixes, date segments, and hex hashes align vertically down the table column.
+  - *Color & Contrast*: Uses subtle high-contrast monospace badges in both Light and Dark mode (`text-[#0051d5]` / dark mode `text-[#60a5fa]` or high-contrast slate) with `whitespace-nowrap` discipline so IDs never break across lines.
+- **Interactive Feedback & Motion**:
+  - Clicking an Asset ID in the Dossier or Inspector copies the unified ID to the clipboard with instant toast confirmation.
+  - Global search supports instant filtering by any part of the Asset ID (category prefix, date segment, or 4-char hash).
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-### Decision 1: Unified Schema vs Separate Tables
-- **Chosen Approach**: Expanded Unified Master Table (`inventory_items`) with rich typed columns for universal and category-specific attributes (quantity, brand, sub-category, notes, box number, description, estimated market price source).
-- **Why**: Allows instant cross-category search, unified filtering by room/status, unified CSV/JSON export, and seamless dashboard aggregations without complex SQL `UNION` operations across fragmented tables.
-- **Alternatives Considered**: Separate tables per category (e.g. `health_wellness_items`, `home_appliances_items`) were rejected because they fragment search, duplicate migration logic, break universal ID lookups, and complicate foreign-key relationships.
-
-### Decision 2: Server-Side Gemini 3.8 Flash with Grounding
-- **Chosen Approach**: Server-side proxy route `/api/ai/analyze-item` using `@google/genai` SDK with `gemini-3.8-flash`. Prompt includes structured schema output instructions and web-grounded Indian retail pricing heuristics.
-- **Why**: Keeps API keys strictly server-side, executes in under 2 seconds, and provides native multimodal vision understanding of text, packaging barcodes, branding logos, and specs.
-- **Alternatives Considered**: Client-side OCR (Tesseract.js) was rejected because it only reads raw text without semantic categorization, brand detection, or price lookup.
+- **Decision 1: Deterministic FNV-1a Hash + Collision Guard Algorithm**
+  - *Chosen Approach*: Generate the 4-character hex suffix (`HASH`) using a deterministic 32-bit FNV-1a hash seeded from the item's immutable primary key (`item.id`), product name, and index salt, combined with a Set-based collision guard across the active inventory list.
+  - *Why*: Ensures that migrating an existing asset produces the exact same `CAT-YYMMDD-HASH` across both phone and MacBook without random drift during multi-device sync, while guaranteeing zero duplicates even if two identical products are scanned on the same day.
+  - *Alternatives Considered*: Pure `Math.random()` generation (rejected because unsynced devices could generate different IDs for the same legacy item during migration).
+- **Decision 2: Unified `code` and `serialNumber` Synchronization**
+  - *Chosen Approach*: Store the canonical `CAT-YYMMDD-HASH` string in both `item.code` and `item.serialNumber` in the data model while displaying it once under the **Asset ID** column.
+  - *Why*: Maintains full backward compatibility with existing PostgreSQL and Firestore schemas without requiring destructive database table drops.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
+## 4. Technical Architecture & Data Strategy *(Technical Reference)*
 
-### System Architecture Diagram
+- **Architecture & Component Diagram**:
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          CLIENT (REACT SPA)                            │
-│                                                                        │
-│  ┌───────────────────────┐             ┌────────────────────────────┐  │
-│  │   CameraScreen.tsx    │             │   InventoryScreen.tsx      │  │
-│  │  - Video Frame / File │             │  - Master Table & Grid     │  │
-│  │  - Reticle Scanner    │             │  - Category Filter         │  │
-│  └───────────┬───────────┘             └─────────────▲──────────────┘  │
-│              │ Snapshot (Base64 JPEG)                │                 │
-│              ▼                                       │                 │
-│  ┌────────────────────────────────────────┐          │                 │
-│  │   Interactive Review Form Modal        │          │                 │
-│  │  - Auto-populated AI fields            │          │                 │
-│  │  - Full inline editing                 │          │                 │
-│  │  - Save / Retake actions               │          │                 │
-│  └───────────────────┬────────────────────┘          │                 │
-└──────────────────────┼───────────────────────────────┼─────────────────┘
-                       │ POST /api/ai/analyze-item     │
-                       │ POST /api/inventory           │
-                       ▼                               │
-┌──────────────────────────────────────────────────────┴─────────────────┐
-│                        SERVER (EXPRESS.JS)                             │
-│                                                                        │
-│  ┌────────────────────────────────┐    ┌────────────────────────────┐  │
-│  │  POST /api/ai/analyze-item     │    │  POST /api/inventory       │  │
-│  │  - @google/genai SDK           │    │  - Drizzle ORM Upsert      │  │
-│  │  - gemini-3.8-flash Vision     │    │  - Multi-tenant User Scape │  │
-│  │  - Google Search Grounding     │    │                            │  │
-│  └────────────────┬───────────────┘    └─────────────┬──────────────┘  │
-└───────────────────┼──────────────────────────────────┼─────────────────┘
-                    │                                  │
-                    ▼                                  ▼
-         ┌─────────────────────┐            ┌─────────────────────┐
-         │ Gemini 3.8 Flash AI │            │ Cloud SQL (Postgres)│
-         │ & Web Price Search  │            │ & Firebase Firestore│
-         └─────────────────────┘            └─────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                   Asset ID Generation & Normalization Engine             │
+│  ┌────────────────────┐   ┌────────────────────┐   ┌──────────────────┐  │
+│  │ Category Prefix    │ + │ Date Extractor     │ + │ FNV-1a 4-Hex     │  │
+│  │ (ELE/MED/HOM/WAR…) │   │ (YYMMDD from Date) │   │ + Collision Set  │  │
+│  └─────────┬──────────┘   └─────────┬──────────┘   └────────┬─────────┘  │
+│            └────────────────────────┼───────────────────────┘            │
+│                                     ▼                                    │
+│                        Canonical ID: ELE-261017-8F2A                     │
+└─────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────┐
+        ▼                             ▼                             ▼
+┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
+│ Cloud & Local Sync    │   │ Camera / Manual Add   │   │ UI Presentation       │
+│ - Auto-migrates       │   │ - Generates canonical │   │ - Table: Asset ID col │
+│   legacy S.No / code  │   │   ID on scan/category │   │ - Brand row: clean    │
+│ - Persists updates to │   │ - Keeps OCR lot codes │   │   without duplicate # │
+│   Postgres & Firestore│   │   separate from ID    │   │ - Dossier & Inspector │
+└───────────────────────┘   └───────────────────────┘   └───────────────────────┘
 ```
 
-### Expanded Data Model (`InventoryItem`)
-
-```typescript
-export interface InventoryItem {
-  id: string;
-  serialNumber?: string;       // e.g. "1", "2", "SN-9428"
-  code: string;               // e.g. "#HLT-1001", "#APP-2002"
-  name: string;               // e.g. "Cutihance Men Tablets"
-  subname?: string;           // e.g. "Nutraceutical supplement"
-  category: string;           // "Health & Wellness" | "Home Appliances" | "Electronics" | etc.
-  subCategory?: string;       // "Dietary Supplements / Hair & Skin Care"
-  description?: string;       // Multi-line detailed product description
-  brand?: string;             // e.g. "Cutihance", "Whirlpool"
-  barcode?: string;           // Scanned barcode or "N/A"
-  quantity?: string;          // e.g. "30 Tablets", "1 Unit"
-  boxNumber?: string;         // e.g. "Box #3", "N/A"
-  expiresDate?: string;       // Expiry date or "N/A"
-  purchaseDate?: string;      // Purchase date or "N/A"
-  value: number;              // Purchase price / valuation in ₹ INR
-  condition?: string;         // "New / Unopened" | "Good" | "Used"
-  notes?: string;             // Dermatologist advice, energy rating, etc.
-  priceSource?: string;       // "Croma listed price", "MRP on label", etc.
-  location?: string;          // "Master Bathroom", "Laundry Room"
-  imageUrl: string;           // Snapshot data URL or stored URL
-  createdAt?: string;
-  updatedAt?: string;
-}
-```
-
-### Database Schema Updates (`src/db/schema.ts`)
-Add missing typed columns to `inventory_items`:
-- `description`: `text('description')`
-- `quantity`: `text('quantity')`
-- `box_number`: `text('box_number')`
-- `purchase_date`: `text('purchase_date')`
-- `notes`: `text('notes')`
-- `price_source`: `text('price_source')`
-- `sub_category`: `text('sub_category')` (already present, ensured fully mapped)
-
-### Interactive Review Form Specification
-The modal will feature a 2-column or responsive vertical flow:
-- Left / Top: Photo thumbnail with quick zoom and retake button.
-- Right / Body: Structured field groups:
-  1. **Primary Identification**: Product Name, Brand, Serial No., Barcode.
-  2. **Categorization**: Category dropdown (Health & Wellness, Home Appliances, Electronics, Wardrobe, Furniture, Tools, etc.), Sub-category input.
-  3. **Inventory & Storage**: Quantity, Box No, Storage Location, Condition.
-  4. **Financial & Lifecycle**: Purchase Price (₹ INR), Price Estimate Source, Purchase Date, Expiry Date.
-  5. **Specs & Notes**: Full Description textarea, Notes textarea.
-- Live AI Extraction Progress: Shows a sleek scanning bar while Gemini processes, then populates all form fields automatically, highlighting newly detected attributes with option to edit before clicking **"Save to Vault"**.
+- **Data Model & Algorithm Rules**:
+  - **Category Prefix Map (`CAT`)**:
+    - `Electronics & Gadgets` → `ELE`
+    - `Medicine & Health` → `MED`
+    - `Home & Appliances` → `HOM`
+    - `Wardrobe & Apparel` → `WAR`
+    - `Documents & Books` → `DOC`
+    - `Kitchen & Pantry` → `KIT`
+    - `Vehicles & Mobility` → `VEH`
+    - `Valuables & Jewelry` → `VAL`
+    - Fallback → First 3 uppercase letters of category or `AST`
+  - **Date Segment (`YYMMDD`)**:
+    - Parsed from `purchaseDate`, `boughtDate`, or the timestamp embedded in `item.id` (`real-item-<timestamp>`), falling back to the current date in `YYMMDD` format.
+  - **Unique Hash (`HASH`)**:
+    - 4-character uppercase hex (`0-9A-F`) derived deterministically from `item.id + item.name` with an automatic collision counter if another item in the vault shares the same prefix, date, and hash.
+- **Interactive Component & State Mapping**:
+  - **Sync & Migration Pipeline**: On inventory load/sync, checks if every item's `serialNumber` and `code` match `/^[A-Z]{3}-\d{6}-[0-9A-F]{4}$/` and are unique across the ledger. Any legacy or duplicate item is updated in state and persisted to PostgreSQL and Firestore.
+  - **Inventory Ledger Table & Cards**: Displays `Asset ID` in a dedicated `whitespace-nowrap` monospace column (`ELE-261017-8F2A`), removes the duplicate `#CODE` next to the brand name, and supports sorting and searching by Asset ID.
+  - **Scanner, Dossier, Inspector & Edit Modal**: All views read and edit the unified `Asset ID` consistently.
